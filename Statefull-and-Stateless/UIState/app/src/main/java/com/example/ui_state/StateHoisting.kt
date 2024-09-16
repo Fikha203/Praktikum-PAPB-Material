@@ -30,12 +30,12 @@ fun StatefulCounter(modifier: Modifier = Modifier) {
 }
 
 
-
 @Preview(showBackground = true)
 @Composable
 fun CounterPreview() {
     UI_StateTheme {
         StatefulCounter()
+
     }
 }
 
@@ -43,7 +43,7 @@ fun CounterPreview() {
 @Composable
 fun StatelessCounter(
     count: Int,           //state
-    onClick : () -> Unit,  //event
+    onClick: () -> Unit,  //event
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -62,7 +62,12 @@ fun StatelessCounter(
 @Composable
 fun StatelessCounterPreview() {
     var count by rememberSaveable { mutableStateOf(0) }
+    var count2 by rememberSaveable { mutableStateOf(0) }
+
     UI_StateTheme {
-        StatelessCounter(count = count, onClick = { count++ })
+        Column {
+            StatelessCounter(count = count, onClick = { count++ })
+            StatelessCounter(count = count2, onClick = { count2+=2 })
+        }
     }
 }
