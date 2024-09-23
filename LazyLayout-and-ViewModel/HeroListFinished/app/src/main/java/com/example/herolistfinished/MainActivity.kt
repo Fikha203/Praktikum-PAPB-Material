@@ -30,7 +30,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import com.example.herolistfinished.model.HeroesData
 import com.example.herolistfinished.repository.HeroRepository
 import com.example.herolistfinished.ui.theme.HeroListFinishedTheme
 
