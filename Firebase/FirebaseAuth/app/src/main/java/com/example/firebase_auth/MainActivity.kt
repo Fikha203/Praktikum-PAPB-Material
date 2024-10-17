@@ -5,35 +5,9 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
@@ -41,6 +15,12 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetCredentialResponse
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.NavController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.example.firebase_auth.screen.home.HomeScreen
+import com.example.firebase_auth.screen.login.LoginScreen
 import com.example.firebase_auth.ui.theme.Firebase_AuthTheme
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -62,19 +42,36 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         auth = Firebase.auth // Mengambil instance FirebaseAuth
 
+
         setContent {
             Firebase_AuthTheme {
-                // Menampilkan composable LoginScreen dengan state pengguna dan action ketika tombol sign-in atau sign-out ditekan
-                LoginScreen(
-                    user = currentUser,
-                    onSignInClick = { signIn() },
-                    onSignOutClick = { signOut() }
-                )
+
+                val navController = rememberNavController()
+
+                // Tentukan navGraph
+                NavHost(
+                    navController = navController,
+                    startDestination = if (currentUser != null) "home" else "login"
+                ) {
+                    composable("login") {
+                        LoginScreen(
+                            onSignInClick = { signIn(navController) },
+                        )
+                    }
+
+                    composable("home") {
+                        HomeScreen(
+                            user = currentUser,
+                            onSignOutClick = { signOut(navController) }
+                        )
+                    }
+                }
+
             }
         }
     }
 
-    private fun signIn() {
+    private fun signIn(navController: NavController) {
         // Inisialisasi CredentialManager untuk mengelola credential pengguna
         val credentialManager = CredentialManager.create(this)
 
@@ -96,7 +93,7 @@ class MainActivity : ComponentActivity() {
                     request = request,
                     context = this@MainActivity,
                 )
-                handleSignIn(result) // Memproses credential yang didapat
+                handleSignIn(result, navController) // Memproses credential yang didapat
             } catch (e: GetCredentialException) {
                 Log.d(
                     "Error",
@@ -106,7 +103,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun handleSignIn(result: GetCredentialResponse) {
+    private fun handleSignIn(result: GetCredentialResponse, navController: NavController) {
         // Mengecek tipe credential yang diterima (misal: Google ID Token)
         when (val credential = result.credential) {
             is CustomCredential -> {
@@ -115,7 +112,10 @@ class MainActivity : ComponentActivity() {
                         // Parsing Google ID Token dan melakukan proses autentikasi dengan Firebase
                         val googleIdTokenCredential =
                             GoogleIdTokenCredential.createFrom(credential.data)
-                        firebaseAuthWithGoogle(googleIdTokenCredential.idToken) // Melakukan login dengan token
+                        firebaseAuthWithGoogle(
+                            googleIdTokenCredential.idToken,
+                            navController
+                        ) // Melakukan login dengan token
                     } catch (e: GoogleIdTokenParsingException) {
                         Log.e(
                             TAG,
@@ -140,15 +140,22 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun firebaseAuthWithGoogle(idToken: String) {
+    private fun firebaseAuthWithGoogle(idToken: String, navController: NavController) {
         // Menggunakan credential Google untuk melakukan login dengan Firebase
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         auth.signInWithCredential(credential)
             .addOnCompleteListener(this) { task ->
                 if (task.isSuccessful) {
-                    Log.d(TAG, "signInWithCredential:success") // Debugging ketika Login berhasil, log ini dapat dilihat di Logcat
+                    Log.d(
+                        TAG,
+                        "signInWithCredential:success"
+                    ) // Debugging ketika Login berhasil, log ini dapat dilihat di Logcat
                     val user = auth.currentUser // Mendapatkan pengguna saat ini dari Firebase
+
                     updateUI(user) // Mengupdate UI berdasarkan status login
+                    navController.navigate("home") {
+                        popUpTo("login") { inclusive = true }
+                    }
                 } else {
                     Log.w(TAG, "signInWithCredential:failure", task.exception) // Login gagal
                     updateUI(null) // Mengupdate UI menjadi kondisi tidak login
@@ -156,13 +163,14 @@ class MainActivity : ComponentActivity() {
             }
     }
 
-    private fun signOut() {
+    private fun signOut(navController: NavController) {
         lifecycleScope.launch {
             val credentialManager = CredentialManager.create(this@MainActivity)
             auth.signOut() // Melakukan logout dari Firebase
             credentialManager.clearCredentialState(ClearCredentialStateRequest()) // Menghapus status credential
         }
         updateUI(null) // Mengupdate UI setelah logout
+        navController.navigate("login") { popUpTo("home") { inclusive = true } }
     }
 
     private fun updateUI(user: FirebaseUser?) {
@@ -173,8 +181,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         // Mengecek apakah ada pengguna yang sudah login saat aplikasi dimulai
-        val currentUser = auth.currentUser
-        updateUI(currentUser) // Mengupdate UI berdasarkan status pengguna saat ini
+        updateUI(auth.currentUser) // Mengupdate UI berdasarkan status pengguna saat ini
     }
 
     companion object {
@@ -183,82 +190,5 @@ class MainActivity : ComponentActivity() {
 }
 
 
-@Composable
-fun LoginScreen(
-    // Menggunakan stateless UI state
-    user: FirebaseUser?,
-    onSignInClick: () -> Unit,
-    onSignOutClick: () -> Unit
-) {
-    val snackbarHostState = remember { SnackbarHostState() } // State untuk mengelola Snackbar
-    val coroutineScope = rememberCoroutineScope() // Coroutine scope untuk memicu tampilan snackbar
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) } // Menampilkan snackbar di layar
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            if (user == null) { // Jika belum login, tampilkan tombol Sign In
-                Button(
-                    onClick = {
-                        onSignInClick() // Memanggil fungsi sign-in saat tombol diklik
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF4285F4),
-                        contentColor = Color.White
-                    ),
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_google_logo), // Ikon Google, jangan lupa tambahkan gambar di file drawable
-                            contentDescription = "Google Logo",
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "Sign In with Google")
-                    }
-                }
-            } else { // Jika sudah login, tampilkan pesan dan tombol Sign Out
-                Text(text = "Hello, ${user.displayName ?: "User"}!")
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Button(
-                    onClick = {
-                        onSignOutClick() // Memanggil fungsi sign-out saat tombol diklik
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar("Anda telah logout") // Menampilkan snackbar saat logout
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Red, // Warna merah untuk tombol sign-out
-                        contentColor = Color.White
-                    ),
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(text = "Sign Out")
-                }
-
-                // Memicu snackbar ketika pengguna login
-                LaunchedEffect(Unit) {
-                    coroutineScope.launch {
-                        snackbarHostState.showSnackbar("Anda telah login")
-                    }
-                }
-            }
-        }
-    }
-}
-
-
-@Preview(showBackground = true)
-@Composable
-fun LoginScreenPreview() {
-    LoginScreen(user = null, onSignInClick = {}, onSignOutClick = {})
-}
 
