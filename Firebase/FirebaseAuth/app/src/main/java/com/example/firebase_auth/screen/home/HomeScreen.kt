@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseUser
-import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
